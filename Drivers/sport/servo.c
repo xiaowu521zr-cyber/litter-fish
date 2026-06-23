@@ -658,47 +658,45 @@ void Motor_Init(void)
 void ControlPropellers(PropellerState state)
 {
 	propeller_state = state;
-//    uint32_t current_time = HAL_GetTick();
-//    
-//    switch(state) {
-//        case PROPELLER_FORWARD:  // 正转
-//            // 设置方向为正转 (PA12高电平)
-//			// 螺旋桨1正转：PIN1高，PIN2低
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_SET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_RESET);
-//            
-//            // 螺旋桨2反转：PIN1低，PIN2高
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_RESET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_SET);
-////		    set_pwm(&htim3, TIM_CHANNEL_1, 9.5f);
-////		    set_pwm(&htim3, TIM_CHANNEL_2, 5.5f);
-
-
-//            break;
-//		
-//        case PROPELLER_REVERSE:  // 反转
-// // 螺旋桨1反转：PIN1低，PIN2高
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_RESET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_SET);
-//            
-//            // 螺旋桨2正转：PIN1高，PIN2低
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_SET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_RESET);
-//            break;
-////			set_pwm(&htim3, TIM_CHANNEL_1, 5.5f);
-////		    set_pwm(&htim3, TIM_CHANNEL_2, 9.5f);		
-//        case PROPELLER_STOP:  // 停止
-//            // 禁用电机 (PA12低电平)
-//default:
-//            // 所有引脚低电平
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_RESET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_RESET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_RESET);
-//            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_RESET);
-////			set_pwm(&htim3, TIM_CHANNEL_1, 7.5f);
-////		    set_pwm(&htim3, TIM_CHANNEL_2, 7.5f);		
-//            break;
-//    }
+    uint32_t current_time = HAL_GetTick();
+    
+    switch(state) {
+        case PROPELLER_FORWARD:  // 正转
+            // 设置方向为正转 (PA12高电平)
+			// 螺旋桨1正转：PIN1高，PIN2低
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_RESET);
+            
+            // 螺旋桨2反转：PIN1低，PIN2高
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_SET);
+//		    set_pwm(&htim3, TIM_CHANNEL_1, 9.5f);
+//		    set_pwm(&htim3, TIM_CHANNEL_2, 5.5f);
+            break;
+		
+        case PROPELLER_REVERSE:  // 反转
+ // 螺旋桨1反转：PIN1低，PIN2高
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_SET);
+            
+            // 螺旋桨2正转：PIN1高，PIN2低
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_SET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_RESET);
+            break;
+//			set_pwm(&htim3, TIM_CHANNEL_1, 5.5f);
+//		    set_pwm(&htim3, TIM_CHANNEL_2, 9.5f);		
+        case PROPELLER_STOP:  // 停止
+            // 禁用电机 (PA12低电平)
+		default:
+            // 所有引脚低电平
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN1, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO1_PIN2, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN1, GPIO_PIN_RESET);
+            HAL_GPIO_WritePin(MOTOR_PORT, MOTOR_LUO2_PIN2, GPIO_PIN_RESET);
+//			set_pwm(&htim3, TIM_CHANNEL_1, 7.5f);
+//		    set_pwm(&htim3, TIM_CHANNEL_2, 7.5f);		
+            break;
+    }
 }
 // 新增螺旋桨控制函数（在任务中调用）
 void UpdatePropellers(void) 

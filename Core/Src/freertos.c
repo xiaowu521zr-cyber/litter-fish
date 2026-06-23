@@ -46,15 +46,6 @@ typedef struct {
         INA226_Data power;     // 电源传感器数据
     } data;
 } SensorMessage_t;
-// 舵机控制指令格式 (5字节)
-#pragma pack(push, 1)
-typedef struct {
-    uint8_t header;     // 固定头 (0x55)
-    uint8_t group_id;   // 组ID (0:1-3号舵机组, 1:4号舵机)
-    uint16_t value;     // 控制值 (动作ID或角度)
-    uint8_t checksum;   // 校验和
-} ServoCommand;
-#pragma pack(pop)
 extern volatile SwimDirection turn_direction; 
 volatile uint8_t Flag_Servo = 0xFF;
 uint8_t Flag_X = 0;
@@ -85,13 +76,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Receive_Task */
-osThreadId_t Receive_TaskHandle;
-const osThreadAttr_t Receive_Task_attributes = {
-  .name = "Receive_Task",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
+
 /* Definitions for Sensor_Task */
 osThreadId_t Sensor_TaskHandle;
 const osThreadAttr_t Sensor_Task_attributes = {
@@ -99,26 +84,13 @@ const osThreadAttr_t Sensor_Task_attributes = {
   .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,//原来是osPriorityNormal
 };
-/* Definitions for Control_Task */
-osThreadId_t Control_TaskHandle;
-const osThreadAttr_t Control_Task_attributes = {
-  .name = "Control_Task",
-  .stack_size = 768 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-/* Definitions for Send_Task */
-osThreadId_t Send_TaskHandle;
-const osThreadAttr_t Send_Task_attributes = {
-  .name = "Send_Task",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
+
 /* Definitions for Parse_Task */
 osThreadId_t Parse_TaskHandle;
 const osThreadAttr_t Parse_Task_attributes = {
   .name = "Parse_Task",
   .stack_size = 384 * 4,
-  .priority = (osPriority_t) osPriorityLow3,
+  .priority = (osPriority_t) osPriorityNormal1,
 };
 /* Definitions for Status_Task */
 osThreadId_t Status_TaskHandle;
@@ -152,10 +124,6 @@ osMessageQueueId_t status_queueHandle;
 const osMessageQueueAttr_t status_queue_attributes = {
   .name = "status_queue"
 };
-//osMessageQueueId_t sensor_data_queueHandle;
-//const osMessageQueueAttr_t sensor_data_queue_attributes = {
-//    .name = "sensor_data_queue"
-//};
 osMessageQueueId_t servo_cmd_queueHandle;
 const osMessageQueueAttr_t servo_cmd_queue_attributes = {
     .name = "servo_cmd_queue"
@@ -164,10 +132,9 @@ const osMessageQueueAttr_t servo_cmd_queue_attributes = {
 /* USER CODE BEGIN FunctionPrototypes */
 void parse_command(const char *cmd, uint8_t port_id);
 void SafePrintf(const char *format, ...);
-void TestServoAction(void); // 添加测试函数声明
 void SafePrintf(const char *format, ...) 
 {
-    if (osMutexAcquire(uartMutex,0) == osOK) {  // 最多等待100ms
+    if (osMutexAcquire(uartMutex,100) == osOK) {  // 最多等待100ms
         va_list args;
         va_start(args, format);
         vprintf(format, args);
@@ -180,10 +147,9 @@ void SafePrintf(const char *format, ...)
 void StartDefaultTask(void *argument);
 void CommReceiveEntry(void *argument);
 void SensorProcessEntry(void *argument);
-void ControlEntry(void *argument);
 void CommSendEntry(void *argument);
-void ParseEntry(void *argument);
-void StatusEntry(void *argument);
+//void ParseEntry(void *argument);
+//void StatusEntry(void *argument);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
 /**
@@ -232,33 +198,15 @@ void MX_FREERTOS_Init(void) {
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  /* creation of Receive_Task */
-  Receive_TaskHandle = osThreadNew(CommReceiveEntry, NULL, &Receive_Task_attributes);
-
   /* creation of Sensor_Task */
   Sensor_TaskHandle = osThreadNew(SensorProcessEntry, NULL, &Sensor_Task_attributes);
 
-  /* creation of Control_Task */
-  Control_TaskHandle = osThreadNew(ControlEntry, NULL, &Control_Task_attributes);
+//  /* creation of Parse_Task */
+//  Parse_TaskHandle = osThreadNew(ParseEntry, NULL, &Parse_Task_attributes);
 
-  /* creation of Send_Task */
-  Send_TaskHandle = osThreadNew(CommSendEntry, NULL, &Send_Task_attributes);
+//  /* creation of Status_Task */
+//  Status_TaskHandle = osThreadNew(StatusEntry, NULL, &Status_Task_attributes);
 
-  /* creation of Parse_Task */
-  Parse_TaskHandle = osThreadNew(ParseEntry, NULL, &Parse_Task_attributes);
-
-  /* creation of Status_Task */
-  Status_TaskHandle = osThreadNew(StatusEntry, NULL, &Status_Task_attributes);
-//  sensor_data_queueHandle = osMessageQueueNew(
-//        10,                        // 队列容量
-//        sizeof(SensorMessage_t),   // 消息大小
-//        &sensor_data_queue_attributes
-//    );
-   servo_cmd_queueHandle = osMessageQueueNew(
-        10,                         // 队列容量
-        sizeof(ServoCommand),        // 消息大小
-        &servo_cmd_queue_attributes
-    );
 uartMutex = osMutexNew(NULL);
   if (uartMutex == NULL) {
     // 互斥锁创建失败处理（系统关键错误）
@@ -287,32 +235,18 @@ void StartDefaultTask(void *argument)
 {
   /* USER CODE BEGIN StartDefaultTask */
   /* Infinite loop */
-//	static uint8_t last_flag = 0xFF; // 初始化为不可能的值
-//	static uint8_t last_cruise_state = CRUISE_IDLE;
   for(;;)
   {
-//	  uint8_t local_servo_flag;
-//	  if (cruise_control.state != CRUISE_IDLE) {
-//            Cruise_Update();
-//        }
-	  UpdatePropellers();
+		UpdatePropellers();
 		osMutexAcquire(servoMutex, osWaitForever);
         uint8_t local_flag = Flag_Servo;
         SwimDirection local_turn_direction = turn_direction;
         osMutexRelease(servoMutex);
-	  // 获取当前巡航状态
-    uint8_t cruise_active = 0;
-	uint8_t current_cruise_state = CRUISE_IDLE; 
-    osMutexAcquire(cruiseMutex, osWaitForever);
-	cruise_active = cruise_control.active;
-    osMutexRelease(cruiseMutex);
-//	cruise_active = (cruise_control.state != CRUISE_IDLE);
-//    if(cruise_control.state != CRUISE_IDLE) {
-//        cruise_active = 1;
-//    }
-//    osMutexRelease(cruiseMutex);
-//	  uint8_t state_changed = (local_flag != last_flag) || 
-//                           (current_cruise_state != last_cruise_state);
+		// 获取当前巡航状态
+		uint8_t cruise_active = 0;
+		osMutexAcquire(cruiseMutex, osWaitForever);
+		cruise_active = cruise_control.active;
+		osMutexRelease(cruiseMutex);
 	if (cruise_active) {
         // 巡航模式优先
         Cruise_Update(); // 在互斥锁保护下更新
@@ -326,36 +260,14 @@ void StartDefaultTask(void *argument)
                 Servo_UpdateTask();
             }
             else if (local_turn_direction == DIRECTION_STOP) {
-                // 确保舵机保持停止状态
-                static uint32_t last_stop_check = 0;
-                if (HAL_GetTick() - last_stop_check > 1000) {
-                    Servo_Stop(); // 每秒检查一次
-                    last_stop_check = HAL_GetTick();
-                }
-            }// 手动模式处理 - 只需要处理前进状态
-//        else if (local_flag == 1) {
-//            Servo_ForwardTask();
-//        }
-	else if (local_flag == 1 && local_turn_direction == DIRECTION_FORWARD) {
-        Servo_ForwardTask();
-    }
-    // 停止状态处理
-    else if (local_turn_direction == DIRECTION_STOP) {
-        // 确保舵机保持停止状态
-        static uint32_t last_stop_check = 0;
-        if (HAL_GetTick() - last_stop_check > 1000) {
-            Servo_Stop(); // 每秒检查一次
-            last_stop_check = HAL_GetTick();
-        }
-    }
-//	  	  if (Flag_X == 0)
-//	  {
-////		set_pwm(&htim2, TIM_CHANNEL_1, 12.0f);
-//	  }
-//	  else if (Flag_X == 1) {
-//        }
-//       else if (Flag_X == 2) {
-//	   }
+            // 确保舵机保持停止状态
+            static uint32_t last_stop_check = 0;
+            if (HAL_GetTick() - last_stop_check > 1000) {
+                Servo_Stop(); // 每秒检查一次
+                last_stop_check = HAL_GetTick();
+            }
+            }
+		}
 		if (Flag_Z == 0xFF) {
             // 未收到指令，保持初始值 8.5f
             static uint32_t last_check = 0;
@@ -395,25 +307,19 @@ void StartDefaultTask(void *argument)
 	else if (Flag_Z == 9) {
         set_pwm(&htim3, TIM_CHANNEL_4, 35.5f);
     } osDelay(10);
-}
-	 
-  }
+	} 
 }
   /* USER CODE END StartDefaultTask */
 
 
 /* USER CODE BEGIN Header_CommReceiveEntry */
-/**
-* @brief Function implementing the Receive_Task thread.
-* @param argument: Not used
-* @retval None
-*/
+
 /* USER CODE END Header_CommReceiveEntry */
 void CommReceiveEntry(void *argument)
 {
   /* USER CODE BEGIN CommReceiveEntry */
   /* Infinite loop */
-char rx_buffer[64]; // 使用局部缓冲区
+	char rx_buffer[64]; // 使用局部缓冲区
     for (;;) {
         if (osMessageQueueGet(uart3_rx_queueHandle, rx_buffer, NULL, 50) == osOK) {
             // 快速处理指令
@@ -437,7 +343,6 @@ void SensorProcessEntry(void *argument)
 {
 	/* USER CODE BEGIN SensorProcessEntry */
 	/* Infinite loop */
-//	SafePrintf("Sensor Task Started!\r\n");
 	SensorData_t sensor_data;
 	TickType_t lastWakeTime = xTaskGetTickCount();
   for(;;)
@@ -454,189 +359,47 @@ void SensorProcessEntry(void *argument)
             "  pitch_speed: %.10f,\n"
             "  yaw_speed: %.10f\n"
             "},\n"
-            "depth_sensor: {\n"
-            "  depth: 20.0126cm,\n"
-            "  temperature: 19.5,\n"
-            "  pressure: 1960pa\n"
+            "depth_sensor: {"
+            "  depth: %.4fcm,"
+            "  temperature: %.2f,"
+            "  pressure: %.2fpa"
             "},\n"
-            "power_sensor: {\n"
-            "  voltage: 11.8V,\n"
-            "  current: 1.7A,\n"
-            "  power: 20.06W\n"
-            "},\n",
+            "power_sensor: {"
+            "  voltage: %umV,"
+            "  current: %umA,"
+            "  power: %umW""},\n",
             // 姿态数据
             sensor_data.roll, 
             sensor_data.pitch, 
             sensor_data.yaw,
             sensor_data.wx, 
             sensor_data.wy, 
-            sensor_data.wz
+            sensor_data.wz,
             // 深度传感器数据
-//            sensor_data.depth,
-//            sensor_data.temperature,
-//            sensor_data.pressure,
-            // 电源传感器数据
-//            sensor_data.bus_voltage,
-//            sensor_data.current,
-//            sensor_data.power
+            sensor_data.depth,
+            sensor_data.temperature,
+            sensor_data.pressure,
+          // 电源传感器数据
+            sensor_data.bus_voltage,
+            sensor_data.current,
+            sensor_data.power
 			);
-			RF_SendFullSensorData(&sensor_data);	
-	Bluetooth_SendSensorData(&sensor_data);
 	vTaskDelayUntil(&lastWakeTime, pdMS_TO_TICKS(10));  
   }
 
   /* USER CODE END SensorProcessEntry */
 }
 
-/* USER CODE BEGIN Header_ControlEntry */
-/**
-* @brief Function implementing the Control_Task thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ControlEntry */
-// 在ControlEntry任务中添加指令过滤
-void ControlEntry(void *argument)
-{
-    static uint8_t first_run = 1;
-//    ServoCommand cmd;
-//    static ActionType last_action = ACTION_INVALID;
-    
-    if(first_run) {
-//        TestServoAction();
-//        first_run = 0;
-    }
-    
-    for(;;) {
-//        if (osMessageQueueGet(servo_cmd_queueHandle, &cmd, NULL, 0) == osOK) {
-//            // 验证头
-//            if (cmd.header != 0x55) continue;
-//            
-//            // 计算校验和
-//            uint8_t calc_checksum = cmd.header ^ cmd.group_id ^ 
-//                                  (cmd.value >> 8) ^ (cmd.value & 0xFF);
-//            if (calc_checksum == cmd.checksum) {
-//                if (cmd.group_id == 0) { 
-//                    // 过滤重复指令
-//                    if (cmd.value != last_action) {
-//                        Servo_ExecuteGroupAction((ActionType)cmd.value, ACTION_MODE_ONCE);
-//                        last_action = cmd.value;
-//                    }
-//                }
-//                else if (cmd.group_id == 1) {
-//                    uint16_t angle = cmd.value > 180 ? 180 : cmd.value;
-//                    Servo_SetAngle(3, angle);
-//                }
-//            }
-//        }
-        osDelay(100); // 添加延时避免独占CPU
-    }
-}
 /* USER CODE BEGIN Header_CommSendEntry */
-/**
-* @brief Function implementing the Send_Task thread.
-* @param argument: Not used
-* @retval None
-*/
+
 /* USER CODE END Header_CommSendEntry */
-void CommSendEntry(void *argument)
-{
-  /* USER CODE BEGIN CommSendEntry */
-  /* Infinite loop */
-  for(;;)
-	{
-	 osDelay(1);
-	}
-  /* USER CODE END CommSendEntry */
-}
-/* USER CODE BEGIN Header_ParseEntry */
-/**
-* @brief Function implementing the Parse_Task thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_ParseEntry */
-void ParseEntry(void *argument)
-{
-  /* USER CODE BEGIN ParseEntry */
-  /* Infinite loop */
-	char cmd_buf[64];
-	  for(;;)
-	  {
-		if (osMessageQueueGet(parsed_cmd_queueHandle, cmd_buf, NULL, 10) == osOK) {
-				parse_command(cmd_buf, 3);
-//				SafePrintf("Parse task: %s\n", cmd_buf);  // 调试信息
-			}
-			osDelay(10);  
-	  }
-  /* USER CODE END ParseEntry */
-}
-
-/* USER CODE BEGIN Header_StatusEntry */
-/**
-* @brief Function implementing the Status_Task thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StatusEntry */
-void StatusEntry(void *argument)
-{
-  /* USER CODE BEGIN StatusEntry */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(100);
-  }
-  /* USER CODE END StatusEntry */
-}
-
-/* Private application code --------------------------------------------------*/
-/* USER CODE BEGIN Application */
-void TestServoAction(void)
-{
-    // 硬编码测试指令，绕开蓝牙解析
-    ServoCommand test_cmd = {
-        .header = 0x55,
-        .group_id = 0,
-        .value = ACTION_FORWARD,
-        .checksum = 0x55 ^ 0 ^ ACTION_FORWARD
-    };
-    osMessageQueuePut(servo_cmd_queueHandle, &test_cmd, 0, 0);
-//    printf("已发送硬编码测试指令 ACTION_FORWARD\n");
-}
 void parse_command(const char *cmd, uint8_t port_id)
 {
 // 仅打印原始指令
-//    #ifdef DEBUG_MODE
+
 	SafePrintf("CMD: %s\r\n", cmd);
-//    #endif
-	if (strlen(cmd) == 3) {
-        ServoCommand servo_cmd;
-        servo_cmd.header = 0x55;
-        
-        // 舵机组指令 (GA)
-        if (cmd[0] == 'G' && cmd[1] == 'A') {
-            uint8_t action_id = cmd[2] - '0';
-            if (action_id <= ACTION_SURFACE) {
-                servo_cmd.group_id = 0;
-                servo_cmd.value = action_id;
-//		printf("Execute Servo Group Action: %d\r\n", action_id);            
-		}
-} 
-        // 舵机4指令 (S4)
-        else if (cmd[0] == 'S' && cmd[1] == '4') {
-            // 将字符转换为0-180的角度值
-            uint16_t angle = (uint16_t)(cmd[2] - '0') * 20;  // 0-9 → 0°-180°
-            servo_cmd.group_id = 1;
-            servo_cmd.value = angle;
-//            printf("Set Servo 4 Angle: %d degree\r\n", angle);
-        }        
-        // 计算并发送指令
-//        servo_cmd.checksum = servo_cmd.header ^ servo_cmd.group_id ^ 
-//                            (servo_cmd.value >> 8) ^ (servo_cmd.value & 0xFF);
-//        osMessageQueuePut(servo_cmd_queueHandle, &servo_cmd, 0, 0);
-    }
-if (strlen(cmd) == 2)
+
+	if (strlen(cmd) == 2)
     {
         // D系列指令 - 舵机控制
         if (cmd[0] == 'D') {
@@ -644,11 +407,9 @@ if (strlen(cmd) == 2)
             
             switch(cmd[1]) {
                 case '0': // 停止
-//                osMutexAcquire(servoMutex, osWaitForever);    
 					Flag_Servo = 0;
                     turn_direction = DIRECTION_STOP;
                     Servo_Stop();  // 直接调用停止函数
-//				osMutexRelease(servoMutex);
                     printf("Servo stop command received\n");
                     break;
                     
@@ -762,4 +523,3 @@ if (strlen(cmd) == 2)
 		printf("转弯速率设为: %.1f°/s\n", cruise_control.target_turn_rate);
 	}	
 }
-/* USER CODE END Application */

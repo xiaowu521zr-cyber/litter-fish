@@ -29,8 +29,7 @@ void Sensor_ReadAll(SensorData_t* data)
     data->wx = wx;
     data->wy = wy;
     data->wz = wz;  
-//	printf("111结束\r\n");
-	g_sensor_data.roll = r;//全局函数的调用
+	g_sensor_data.roll = r;
 	g_sensor_data.pitch = p;
 	g_sensor_data.yaw = y;
 	g_sensor_data.wx = wx;
@@ -41,15 +40,12 @@ void Sensor_ReadAll(SensorData_t* data)
     data->temperature = temp;
     data->pressure = pressure;
     data->depth = (pressure - 985.0) / 0.983615f; // 计算深度
-	g_sensor_data.temperature = temp;//全局函数的调用
+	g_sensor_data.temperature = temp;
     g_sensor_data.pressure = pressure;
     g_sensor_data.depth = data->depth;	
-//	printf("222结束\r\n");	
     // 读取电源传感器
     data->bus_voltage = INA226_GetBusVoltage();
     data->current = INA226_GetCurrent();
     data->power = INA226_GetPower();
-//	printf("333结束\r\n");
 	OpenMV_GetData(&data->openmv);
-//	printf("444结束\r\n");
 }
